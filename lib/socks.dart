@@ -151,13 +151,13 @@ class SOCKSRequest {
 class SOCKSSocket {
   List<AuthMethods> _auth;
   RawSocket _sock;
-
-  StreamSubscription<RawSocketEvent> _sockSub;
-  SOCKSState _state;
   SOCKSRequest _request;
 
-  final StreamController<SOCKSState> _stateStream = StreamController<SOCKSState>.broadcast();
+  StreamSubscription<RawSocketEvent> _sockSub;
+  StreamSubscription<RawSocketEvent> get subscription => _sockSub;
 
+  SOCKSState _state;
+  final StreamController<SOCKSState> _stateStream = StreamController<SOCKSState>();
   SOCKSState get state => _state;
   Stream<SOCKSState> get stateStream => _stateStream?.stream;
 
@@ -281,7 +281,6 @@ class SOCKSSocket {
         print("<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
         if (reply._value == SOCKSReply.Success._value) {
           _setState(SOCKSState.Connected);
-          _sockSub.cancel(); // dont listen anymore we are connected now
         } else {
           throw reply;
         }
@@ -303,7 +302,7 @@ class SOCKSSocket {
         req.port >> 8,
         req.port & 0xF0,
       ];
-      print(data);
+
       print(
           ">> Version: ${req.version}, Command: ${req.command}, AddrType: ${req.addressType}, Addr: ${req.getAddressString()}, Port: ${req.port}");
       _sock.write(data);
