@@ -20,12 +20,12 @@ class AuthMethods {
   const AuthMethods._(this._value);
 
   String toString() {
-    return const [
-      'AuthMethods.NoAuth',
-      'AuthMethods.GSSApi',
-      'AuthMethods.UsernamePassword',
-      'AuthMethods.NoAcceptableMethods'
-    ][_value];
+    return const {
+      0x00: 'AuthMethods.NoAuth',
+      0x01: 'AuthMethods.GSSApi',
+      0x02: 'AuthMethods.UsernamePassword',
+      0xFF: 'AuthMethods.NoAcceptableMethods'
+    }[_value];
   }
 }
 
@@ -59,7 +59,13 @@ class SOCKSAddressType {
   const SOCKSAddressType._(this._value);
 
   String toString() {
-    return const ['SOCKSAddressType.IPv4', 'SOCKSAddressType.Domain', 'SOCKSAddressType.IPv6'][_value];
+    return const [
+      null,
+      'SOCKSAddressType.IPv4',
+      null,
+      'SOCKSAddressType.Domain',
+      'SOCKSAddressType.IPv6',
+    ][_value];
   }
 }
 
@@ -73,7 +79,12 @@ class SOCKSCommand {
   const SOCKSCommand._(this._value);
 
   String toString() {
-    return const ['SOCKSCommand.Connect', 'SOCKSCommand.Bind', 'SOCKSCommand.UDPAssociate'][_value];
+    return const [
+      null,
+      'SOCKSCommand.Connect',
+      'SOCKSCommand.Bind',
+      'SOCKSCommand.UDPAssociate',
+    ][_value];
   }
 }
 
@@ -114,6 +125,21 @@ class SOCKSRequest {
   final Uint8List address;
   final int port;
 
+  String getAddressString() {
+    if (addressType == SOCKSAddressType.Domain) {
+      return AsciiDecoder().convert(address);
+    } else if (addressType == SOCKSAddressType.IPv4) {
+      return address.join(".");
+    } else if (addressType == SOCKSAddressType.IPv6) {
+      var ret = List<String>();
+      for (var x = 0; x < address.length; x += 2) {
+        ret.add("${address[x].toRadixString(16).padLeft(2, "0")}${address[x + 1].toRadixString(16).padLeft(2, "0")}");
+      }
+      return ret.join(":");
+    }
+    return null;
+  }
+
   SOCKSRequest({
     this.command,
     this.addressType,
@@ -124,27 +150,40 @@ class SOCKSRequest {
 
 class SOCKSSocket {
   List<AuthMethods> _auth;
-  int _remotePort;
-  InternetAddress _remoteIp;
   RawSocket _sock;
-  StreamSubscription _sockSub;
+
+  StreamSubscription<RawSocketEvent> _sockSub;
   SOCKSState _state;
   SOCKSRequest _request;
 
-  Future get waitForExit => _sockSub?.asFuture();
-  RawSocket get socket => _sock;
+  final StreamController<SOCKSState> _stateStream = StreamController<SOCKSState>.broadcast();
+
+  SOCKSState get state => _state;
+  Stream<SOCKSState> get stateStream => _stateStream?.stream;
+
+  /// Waits for state to change to [SOCKSState.Connected]
+  /// If the connection request returns an error from the
+  /// socks server it will be thrown as an exception in the stream
+  ///
+  ///
+  Future<SOCKSState> get _waitForConnect => stateStream.firstWhere((a) => a == SOCKSState.Connected);
 
   SOCKSSocket(
-    InternetAddress ip, {
-    int port = 1080,
+    RawSocket socket, {
     List<AuthMethods> auth = const [AuthMethods.NoAuth],
   }) {
-    _remoteIp = ip;
+    _sock = socket;
     _auth = auth;
-    _remotePort = port ?? 1080;
-    _state = SOCKSState.Starting;
+    _setState(SOCKSState.Starting);
   }
 
+  void _setState(SOCKSState ns) {
+    _state = ns;
+    _stateStream.add(ns);
+  }
+
+  /// Issue connect command to proxy
+  ///
   Future connect(String domain) async {
     final ds = domain.split(':');
     assert(ds.length == 2, "Domain must contain port, example.com:80");
@@ -156,13 +195,31 @@ class SOCKSSocket {
       port: int.tryParse(ds[1]) ?? 80,
     );
     await _start();
+    await _waitForConnect;
+  }
+
+  Future connectIp(InternetAddress ip, int port) async {
+    _request = SOCKSRequest(
+      command: SOCKSCommand.Connect,
+      addressType: ip.type == InternetAddressType.IPv4 ? SOCKSAddressType.IPv4 : SOCKSAddressType.IPv6,
+      address: ip.rawAddress,
+      port: port,
+    );
+    await _start();
+    await _waitForConnect;
+  }
+
+  Future close({bool keepOpen = true}) async {
+    await _stateStream.close();
+    if (!keepOpen) {
+      await _sock.close();
+    }
   }
 
   Future _start() async {
-    _sock = await RawSocket.connect(_remoteIp, _remotePort);
-
     // send auth methods
-    _state = SOCKSState.Auth;
+    _setState(SOCKSState.Auth);
+    print(">> Version: 5, AuthMethods: $_auth");
     _sock.write([
       0x05,
       _auth.length,
@@ -170,32 +227,32 @@ class SOCKSSocket {
     ]);
 
     _sockSub = _sock.listen((RawSocketEvent ev) {
-      print(ev);
       switch (ev) {
         case RawSocketEvent.read:
           {
             final have = _sock.available();
-            print("Reading: $have");
-
             final data = _sock.read(have);
-            print(data);
-
             _handleRead(data);
+            break;
+          }
+        case RawSocketEvent.closed:
+          {
+            _sockSub.cancel();
             break;
           }
       }
     });
   }
 
-  void _handleRead(Uint8List data) {
-    if (_state == SOCKSState.Auth) {
+  void _handleRead(Uint8List data) async {
+    if (state == SOCKSState.Auth) {
       if (data.length == 2) {
         final version = data[0];
         final auth = AuthMethods._(data[1]);
 
-        print("Version: ${version}, Auth: ${auth}");
+        print("<< Version: $version, Auth: $auth");
 
-        _state = SOCKSState.RequestReady;
+        _setState(SOCKSState.RequestReady);
         _writeRequest(_request);
       } else {
         throw "Expected 2 bytes";
@@ -221,12 +278,12 @@ class SOCKSSocket {
           port = data[21] << 8 | data[22];
         }
 
-        print("Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
+        print("<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
         if (reply._value == SOCKSReply.Success._value) {
-          _state = SOCKSState.Connected;
-          _sockSub.cancel(); //disconnect our socket listener
+          _setState(SOCKSState.Connected);
+          _sockSub.cancel(); // dont listen anymore we are connected now
         } else {
-          throw reply.toString();
+          throw reply;
         }
       } else {
         throw "Expected 10 bytes";
@@ -234,23 +291,8 @@ class SOCKSSocket {
     }
   }
 
-  int _getRequestSize(SOCKSRequest req) {
-    final varlen = () {
-      if (req.addressType == SOCKSAddressType.IPv4) {
-        return 4;
-      } else if (req.addressType == SOCKSAddressType.IPv6) {
-        return 16;
-      } else if (req.addressType == SOCKSAddressType.Domain) {
-        return 1 + req.address.lengthInBytes - 1;
-      }
-      return 0;
-    }();
-    return 6 + varlen;
-  }
-
   void _writeRequest(SOCKSRequest req) {
     if (_state == SOCKSState.RequestReady) {
-      if (req.addressType == SOCKSAddressType.IPv4) {}
       final data = [
         req.version,
         req.command._value,
@@ -259,12 +301,14 @@ class SOCKSSocket {
         if (req.addressType == SOCKSAddressType.Domain) req.address.lengthInBytes,
         ...req.address,
         req.port >> 8,
-        req.port & 0xF,
+        req.port & 0xF0,
       ];
       print(data);
+      print(
+          ">> Version: ${req.version}, Command: ${req.command}, AddrType: ${req.addressType}, Addr: ${req.getAddressString()}, Port: ${req.port}");
       _sock.write(data);
     } else {
-      throw "Must be in RequestReady state, current state ${_state}";
+      throw "Must be in RequestReady state, current state $_state";
     }
   }
 }
