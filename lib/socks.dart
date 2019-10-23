@@ -33,6 +33,7 @@ class SOCKSState {
   static const Starting = const SOCKSState._(0x00);
   static const Auth = const SOCKSState._(0x01);
   static const RequestReady = const SOCKSState._(0x02);
+  static const Connected = const SOCKSState._(0x03);
 
   final int _value;
 
@@ -42,7 +43,8 @@ class SOCKSState {
     return const [
       'SOCKSState.Starting',
       'SOCKSState.Auth',
-      'SOCKSState.RequestReady'
+      'SOCKSState.RequestReady',
+      'SOCKSState.Connected',
     ][_value];
   }
 }
@@ -57,11 +59,7 @@ class SOCKSAddressType {
   const SOCKSAddressType._(this._value);
 
   String toString() {
-    return const [
-      'SOCKSAddressType.IPv4',
-      'SOCKSAddressType.Domain',
-      'SOCKSAddressType.IPv6'
-    ][_value];
+    return const ['SOCKSAddressType.IPv4', 'SOCKSAddressType.Domain', 'SOCKSAddressType.IPv6'][_value];
   }
 }
 
@@ -75,11 +73,7 @@ class SOCKSCommand {
   const SOCKSCommand._(this._value);
 
   String toString() {
-    return const [
-      'SOCKSCommand.Connect',
-      'SOCKSCommand.Bind',
-      'SOCKSCommand.UDPAssociate'
-    ][_value];
+    return const ['SOCKSCommand.Connect', 'SOCKSCommand.Bind', 'SOCKSCommand.UDPAssociate'][_value];
   }
 }
 
@@ -138,6 +132,7 @@ class SOCKSSocket {
   SOCKSRequest _request;
 
   Future get waitForExit => _sockSub?.asFuture();
+  RawSocket get socket => _sock;
 
   SOCKSSocket(
     InternetAddress ip, {
@@ -192,7 +187,7 @@ class SOCKSSocket {
     });
   }
 
-  Future _handleRead(Uint8List data) async {
+  void _handleRead(Uint8List data) {
     if (_state == SOCKSState.Auth) {
       if (data.length == 2) {
         final version = data[0];
@@ -201,7 +196,7 @@ class SOCKSSocket {
         print("Version: ${version}, Auth: ${auth}");
 
         _state = SOCKSState.RequestReady;
-        await _writeRequest(_request);
+        _writeRequest(_request);
       } else {
         throw "Expected 2 bytes";
       }
@@ -211,23 +206,28 @@ class SOCKSSocket {
         final reply = SOCKSReply._(data[1]);
         //data[2] reserved
         final addrType = SOCKSAddressType._(data[3]);
-        final addr = Uint8List(16);
+        Uint8List addr;
         var port = 0;
 
         if (addrType == SOCKSAddressType.Domain) {
           final len = data[4];
-          addr.addAll(data.sublist(5, 5 + len));
+          addr = data.sublist(5, 5 + len);
           port = data[5 + len] << 8 | data[6 + len];
         } else if (addrType == SOCKSAddressType.IPv4) {
-          addr.addAll(data.sublist(5, 9));
+          addr = data.sublist(5, 9);
           port = data[9] << 8 | data[10];
         } else if (addrType == SOCKSAddressType.IPv6) {
-          addr.addAll(data.sublist(5, 21));
+          addr = data.sublist(5, 21);
           port = data[21] << 8 | data[22];
         }
 
-        print(
-            "Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
+        print("Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
+        if (reply._value == SOCKSReply.Success._value) {
+          _state = SOCKSState.Connected;
+          _sockSub.cancel(); //disconnect our socket listener
+        } else {
+          throw reply.toString();
+        }
       } else {
         throw "Expected 10 bytes";
       }
@@ -248,7 +248,7 @@ class SOCKSSocket {
     return 6 + varlen;
   }
 
-  Future _writeRequest(SOCKSRequest req) {
+  void _writeRequest(SOCKSRequest req) {
     if (_state == SOCKSState.RequestReady) {
       if (req.addressType == SOCKSAddressType.IPv4) {}
       final data = [
@@ -256,8 +256,7 @@ class SOCKSSocket {
         req.command._value,
         0x00,
         req.addressType._value,
-        if (req.addressType == SOCKSAddressType.Domain)
-          req.address.lengthInBytes,
+        if (req.addressType == SOCKSAddressType.Domain) req.address.lengthInBytes,
         ...req.address,
         req.port >> 8,
         req.port & 0xF,
