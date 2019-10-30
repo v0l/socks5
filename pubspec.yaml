@@ -1,18 +1,12 @@
 name: socks5
 description: Simple SOCKS5 connection initializer using RawSocket, supports connection requests by Ip and Domain
-version: 0.1.0
+version: 0.1.1
 author: Kieran Harkin <kieran+git@harkin.me>
 homepage: https://github.com/v0l/socks
 
 environment:
   sdk: ">=2.3.0 <3.0.0"
 
-dependencies:
-  flutter:
-    sdk: flutter
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-flutter:
