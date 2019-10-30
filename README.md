@@ -1,14 +1,36 @@
 # socks
 
-A new Flutter package project.
+A SOCKS5 connection handler
 
-## Getting Started
+## Example 
 
-This project is a starting point for a Dart
-[package](https://flutter.dev/developing-packages/),
-a library module containing code that can be shared easily across
-multiple Flutter or Dart projects.
+```dart
+/// [SOCKSSocket] uses a raw socket to authorize 
+/// and request a connection, connect to your socks proxy server
+final sock = await RawSocket.connect(InternetAddress.loopbackIPv4, 9050);
 
-For help getting started with Flutter, view our 
-[online documentation](https://flutter.dev/docs), which offers tutorials, 
-samples, guidance on mobile development, and a full API reference.
+/// pass the socket to [SOCKSSocket]
+final proxy = SOCKSSocket(sock);
+
+/// request the proxy to connect to a host
+/// this call will throw exceptions if connection attempt fails from the proxy
+await proxy.connect("google.com:80");
+
+/// Now you can use the [sock] from earlier, since we can only listen
+/// once on a [RawSocket] we must set the [onData] function to intercept 
+/// the events from the socket
+proxy.subscription.onData((RawSocketEvent event) {
+    /// [RawSocketEvent] messages are here
+    /// read from here.. 
+    if (event == RawSocketEvent.read) {
+      final data = sock.read(sock.available());
+      ...
+    }
+});
+
+/// To connect with an [InternetAddress] use:
+/// await s.connectIp(InternetAddress.loopbackIPv4, 80);
+
+/// keepOpen=false will call close the [RawSocket]
+await proxy.close(keepOpen: false);
+```

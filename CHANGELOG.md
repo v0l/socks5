@@ -1,3 +1,7 @@
-## [0.0.1] - TODO: Add release date.
+## [0.0.1] - Init
 
-* TODO: Describe initial release.
+* Basic SOCKS5 support
+
+## [0.1.0] - Bump Version
+
+* Bump version for pub.dev package health

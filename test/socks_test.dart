@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:socks/socks.dart';
+import 'package:socks5/socks5.dart';
 
 void main() {
   test('Test Domain connection', () async {
