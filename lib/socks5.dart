@@ -7,7 +7,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 /// https://tools.ietf.org/html/rfc1928
+/// https://tools.ietf.org/html/rfc1929
 ///
+
+const SOCKSVersion = 0x05;
+const RFC1929Version = 0x01;
 
 class AuthMethods {
   static const NoAuth = const AuthMethods._(0x00);
@@ -34,6 +38,7 @@ class SOCKSState {
   static const Auth = const SOCKSState._(0x01);
   static const RequestReady = const SOCKSState._(0x02);
   static const Connected = const SOCKSState._(0x03);
+  static const AuthStarted = const SOCKSState._(0x04);
 
   final int _value;
 
@@ -45,6 +50,7 @@ class SOCKSState {
       'SOCKSState.Auth',
       'SOCKSState.RequestReady',
       'SOCKSState.Connected',
+      'SOCKSState.AuthStarted'
     ][_value];
   }
 }
@@ -119,7 +125,7 @@ class SOCKSReply {
 }
 
 class SOCKSRequest {
-  final int version = 0x05;
+  final int version = SOCKSVersion;
   final SOCKSCommand command;
   final SOCKSAddressType addressType;
   final Uint8List address;
@@ -133,7 +139,8 @@ class SOCKSRequest {
     } else if (addressType == SOCKSAddressType.IPv6) {
       var ret = List<String>();
       for (var x = 0; x < address.length; x += 2) {
-        ret.add("${address[x].toRadixString(16).padLeft(2, "0")}${address[x + 1].toRadixString(16).padLeft(2, "0")}");
+        ret.add(
+            "${address[x].toRadixString(16).padLeft(2, "0")}${address[x + 1].toRadixString(16).padLeft(2, "0")}");
       }
       return ret.join(":");
     }
@@ -157,20 +164,28 @@ class SOCKSSocket {
   StreamSubscription<RawSocketEvent> get subscription => _sockSub;
 
   SOCKSState _state;
-  final StreamController<SOCKSState> _stateStream = StreamController<SOCKSState>();
+  final StreamController<SOCKSState> _stateStream =
+      StreamController<SOCKSState>();
   SOCKSState get state => _state;
   Stream<SOCKSState> get stateStream => _stateStream?.stream;
+
+  /// For username:password auth
+  final String username;
+  final String password;
 
   /// Waits for state to change to [SOCKSState.Connected]
   /// If the connection request returns an error from the
   /// socks server it will be thrown as an exception in the stream
   ///
   ///
-  Future<SOCKSState> get _waitForConnect => stateStream.firstWhere((a) => a == SOCKSState.Connected);
+  Future<SOCKSState> get _waitForConnect =>
+      stateStream.firstWhere((a) => a == SOCKSState.Connected);
 
   SOCKSSocket(
     RawSocket socket, {
     List<AuthMethods> auth = const [AuthMethods.NoAuth],
+    this.username,
+    this.password,
   }) {
     _sock = socket;
     _auth = auth;
@@ -201,7 +216,9 @@ class SOCKSSocket {
   Future connectIp(InternetAddress ip, int port) async {
     _request = SOCKSRequest(
       command: SOCKSCommand.Connect,
-      addressType: ip.type == InternetAddressType.IPv4 ? SOCKSAddressType.IPv4 : SOCKSAddressType.IPv6,
+      addressType: ip.type == InternetAddressType.IPv4
+          ? SOCKSAddressType.IPv4
+          : SOCKSAddressType.IPv6,
       address: ip.rawAddress,
       port: port,
     );
@@ -219,7 +236,7 @@ class SOCKSSocket {
   Future _start() async {
     // send auth methods
     _setState(SOCKSState.Auth);
-    print(">> Version: 5, AuthMethods: $_auth");
+    //print(">> Version: 5, AuthMethods: $_auth");
     _sock.write([
       0x05,
       _auth.length,
@@ -244,18 +261,54 @@ class SOCKSSocket {
     });
   }
 
+  void _sendUsernamePassword(String uname, String password) {
+    if (uname.length > 255 || password.length > 255) {
+      throw "Username or Password is too long";
+    }
+
+    final data = [
+      RFC1929Version,
+      uname.length,
+      ...AsciiEncoder().convert(uname),
+      password.length,
+      ...AsciiEncoder().convert(password)
+    ];
+
+    //print(">> Sending $username:$password");
+    _sock.write(data);
+  }
+
   void _handleRead(Uint8List data) async {
     if (state == SOCKSState.Auth) {
       if (data.length == 2) {
         final version = data[0];
         final auth = AuthMethods._(data[1]);
 
-        print("<< Version: $version, Auth: $auth");
+        //print("<< Version: $version, Auth: $auth");
 
-        _setState(SOCKSState.RequestReady);
-        _writeRequest(_request);
+        if (auth._value == AuthMethods.UsernamePassword._value) {
+          _setState(SOCKSState.AuthStarted);
+          _sendUsernamePassword(username, password);
+        } else if (auth._value == AuthMethods.NoAuth._value) {
+          _setState(SOCKSState.RequestReady);
+          _writeRequest(_request);
+        } else if (auth._value == AuthMethods.NoAcceptableMethods._value) {
+          throw "No auth methods acceptable";
+        }
       } else {
         throw "Expected 2 bytes";
+      }
+    } else if (_state == SOCKSState.AuthStarted) {
+      if (_auth.contains(AuthMethods.UsernamePassword)) {
+        final version = data[0];
+        final status = data[1];
+
+        if (version != RFC1929Version || status != 0x00) {
+          throw "Invalid username or password";
+        } else {
+          _setState(SOCKSState.RequestReady);
+          _writeRequest(_request);
+        }
       }
     } else if (_state == SOCKSState.RequestReady) {
       if (data.length >= 10) {
@@ -278,7 +331,7 @@ class SOCKSSocket {
           port = data[21] << 8 | data[22];
         }
 
-        print("<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
+        //print("<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
         if (reply._value == SOCKSReply.Success._value) {
           _setState(SOCKSState.Connected);
         } else {
@@ -297,14 +350,14 @@ class SOCKSSocket {
         req.command._value,
         0x00,
         req.addressType._value,
-        if (req.addressType == SOCKSAddressType.Domain) req.address.lengthInBytes,
+        if (req.addressType == SOCKSAddressType.Domain)
+          req.address.lengthInBytes,
         ...req.address,
         req.port >> 8,
         req.port & 0xF0,
       ];
 
-      print(
-          ">> Version: ${req.version}, Command: ${req.command}, AddrType: ${req.addressType}, Addr: ${req.getAddressString()}, Port: ${req.port}");
+      //print(">> Version: ${req.version}, Command: ${req.command}, AddrType: ${req.addressType}, Addr: ${req.getAddressString()}, Port: ${req.port}");
       _sock.write(data);
     } else {
       throw "Must be in RequestReady state, current state $_state";

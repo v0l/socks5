@@ -39,4 +39,20 @@ void main() {
 
     await s.close(keepOpen: false);
   });
+
+  test('Test username:password connection', () async {
+    final sock = await RawSocket.connect(InternetAddress.loopbackIPv4, 1080);
+    final s = SOCKSSocket(
+      sock,
+      username: "test",
+      password: "test",
+      auth: [AuthMethods.NoAuth, AuthMethods.UsernamePassword],
+    );
+
+    await s.connect("google.com:80");
+
+    print("done");
+
+    await s.close(keepOpen: false);
+  });
 }

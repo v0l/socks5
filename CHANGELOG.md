@@ -9,3 +9,7 @@
 ## [0.1.1] - Remove flutter dependency
 
 * Remove empty flutter dependency 
+
+## [0.1.2] - Add Username/Password auth
+
+* Add Username/Password auth

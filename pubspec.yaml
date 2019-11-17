@@ -1,6 +1,6 @@
 name: socks5
 description: Simple SOCKS5 connection initializer using RawSocket, supports connection requests by Ip and Domain
-version: 0.1.1
+version: 0.1.2
 author: Kieran Harkin <kieran+git@harkin.me>
 homepage: https://github.com/v0l/socks
 
