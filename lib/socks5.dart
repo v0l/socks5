@@ -3,47 +3,48 @@ library socks;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import 'dart:typed_data';
 
 /// https://tools.ietf.org/html/rfc1928
 /// https://tools.ietf.org/html/rfc1929
-///
 
 const SOCKSVersion = 0x05;
 const RFC1929Version = 0x01;
 
 class AuthMethods {
-  static const NoAuth = const AuthMethods._(0x00);
-  static const GSSApi = const AuthMethods._(0x01);
-  static const UsernamePassword = const AuthMethods._(0x02);
-  static const NoAcceptableMethods = const AuthMethods._(0xFF);
+  static const NoAuth = AuthMethods._(0x00);
+  static const GSSApi = AuthMethods._(0x01);
+  static const UsernamePassword = AuthMethods._(0x02);
+  static const NoAcceptableMethods = AuthMethods._(0xFF);
 
   final int _value;
 
   const AuthMethods._(this._value);
 
+  @override
   String toString() {
     return const {
-      0x00: 'AuthMethods.NoAuth',
-      0x01: 'AuthMethods.GSSApi',
-      0x02: 'AuthMethods.UsernamePassword',
-      0xFF: 'AuthMethods.NoAcceptableMethods'
-    }[_value];
+          0x00: 'AuthMethods.NoAuth',
+          0x01: 'AuthMethods.GSSApi',
+          0x02: 'AuthMethods.UsernamePassword',
+          0xFF: 'AuthMethods.NoAcceptableMethods'
+        }[_value] ??
+        'Unknown AuthMethod';
   }
 }
 
 class SOCKSState {
-  static const Starting = const SOCKSState._(0x00);
-  static const Auth = const SOCKSState._(0x01);
-  static const RequestReady = const SOCKSState._(0x02);
-  static const Connected = const SOCKSState._(0x03);
-  static const AuthStarted = const SOCKSState._(0x04);
+  static const Starting = SOCKSState._(0x00);
+  static const Auth = SOCKSState._(0x01);
+  static const RequestReady = SOCKSState._(0x02);
+  static const Connected = SOCKSState._(0x03);
+  static const AuthStarted = SOCKSState._(0x04);
 
   final int _value;
 
   const SOCKSState._(this._value);
 
+  @override
   String toString() {
     return const [
       'SOCKSState.Starting',
@@ -56,59 +57,64 @@ class SOCKSState {
 }
 
 class SOCKSAddressType {
-  static const IPv4 = const SOCKSAddressType._(0x01);
-  static const Domain = const SOCKSAddressType._(0x03);
-  static const IPv6 = const SOCKSAddressType._(0x04);
+  static const IPv4 = SOCKSAddressType._(0x01);
+  static const Domain = SOCKSAddressType._(0x03);
+  static const IPv6 = SOCKSAddressType._(0x04);
 
   final int _value;
 
   const SOCKSAddressType._(this._value);
 
+  @override
   String toString() {
     return const [
-      null,
-      'SOCKSAddressType.IPv4',
-      null,
-      'SOCKSAddressType.Domain',
-      'SOCKSAddressType.IPv6',
-    ][_value];
+          null,
+          'SOCKSAddressType.IPv4',
+          null,
+          'SOCKSAddressType.Domain',
+          'SOCKSAddressType.IPv6',
+        ][_value] ??
+        'Unknown SOCKSAddressType';
   }
 }
 
 class SOCKSCommand {
-  static const Connect = const SOCKSCommand._(0x01);
-  static const Bind = const SOCKSCommand._(0x02);
-  static const UDPAssociate = const SOCKSCommand._(0x03);
+  static const Connect = SOCKSCommand._(0x01);
+  static const Bind = SOCKSCommand._(0x02);
+  static const UDPAssociate = SOCKSCommand._(0x03);
 
   final int _value;
 
   const SOCKSCommand._(this._value);
 
+  @override
   String toString() {
     return const [
-      null,
-      'SOCKSCommand.Connect',
-      'SOCKSCommand.Bind',
-      'SOCKSCommand.UDPAssociate',
-    ][_value];
+          null,
+          'SOCKSCommand.Connect',
+          'SOCKSCommand.Bind',
+          'SOCKSCommand.UDPAssociate',
+        ][_value] ??
+        'Unknown SOCKSCommand';
   }
 }
 
 class SOCKSReply {
-  static const Success = const SOCKSReply._(0x00);
-  static const GeneralFailure = const SOCKSReply._(0x01);
-  static const ConnectionNotAllowedByRuleset = const SOCKSReply._(0x02);
-  static const NetworkUnreachable = const SOCKSReply._(0x03);
-  static const HostUnreachable = const SOCKSReply._(0x04);
-  static const ConnectionRefused = const SOCKSReply._(0x05);
-  static const TTLExpired = const SOCKSReply._(0x06);
-  static const CommandNotSupported = const SOCKSReply._(0x07);
-  static const AddressTypeNotSupported = const SOCKSReply._(0x08);
+  static const Success = SOCKSReply._(0x00);
+  static const GeneralFailure = SOCKSReply._(0x01);
+  static const ConnectionNotAllowedByRuleset = SOCKSReply._(0x02);
+  static const NetworkUnreachable = SOCKSReply._(0x03);
+  static const HostUnreachable = SOCKSReply._(0x04);
+  static const ConnectionRefused = SOCKSReply._(0x05);
+  static const TTLExpired = SOCKSReply._(0x06);
+  static const CommandNotSupported = SOCKSReply._(0x07);
+  static const AddressTypeNotSupported = SOCKSReply._(0x08);
 
   final int _value;
 
   const SOCKSReply._(this._value);
 
+  @override
   String toString() {
     return const [
       'SOCKSReply.Success',
@@ -131,13 +137,13 @@ class SOCKSRequest {
   final Uint8List address;
   final int port;
 
-  String getAddressString() {
+  String? getAddressString() {
     if (addressType == SOCKSAddressType.Domain) {
-      return AsciiDecoder().convert(address);
+      return const AsciiDecoder().convert(address);
     } else if (addressType == SOCKSAddressType.IPv4) {
       return address.join(".");
     } else if (addressType == SOCKSAddressType.IPv6) {
-      var ret = List<String>();
+      var ret = <String>[];
       for (var x = 0; x < address.length; x += 2) {
         ret.add(
             "${address[x].toRadixString(16).padLeft(2, "0")}${address[x + 1].toRadixString(16).padLeft(2, "0")}");
@@ -148,30 +154,30 @@ class SOCKSRequest {
   }
 
   SOCKSRequest({
-    this.command,
-    this.addressType,
-    this.address,
-    this.port,
+    required this.command,
+    required this.addressType,
+    required this.address,
+    required this.port,
   });
 }
 
 class SOCKSSocket {
-  List<AuthMethods> _auth;
-  RawSocket _sock;
-  SOCKSRequest _request;
+  late List<AuthMethods> _auth;
+  late RawSocket _sock;
+  late SOCKSRequest _request;
 
-  StreamSubscription<RawSocketEvent> _sockSub;
+  late StreamSubscription<RawSocketEvent> _sockSub;
   StreamSubscription<RawSocketEvent> get subscription => _sockSub;
 
-  SOCKSState _state;
+  late SOCKSState _state;
   final StreamController<SOCKSState> _stateStream =
       StreamController<SOCKSState>();
   SOCKSState get state => _state;
-  Stream<SOCKSState> get stateStream => _stateStream?.stream;
+  Stream<SOCKSState> get stateStream => _stateStream.stream;
 
   /// For username:password auth
-  final String username;
-  final String password;
+  final String? username;
+  final String? password;
 
   /// Waits for state to change to [SOCKSState.Connected]
   /// If the connection request returns an error from the
@@ -199,21 +205,21 @@ class SOCKSSocket {
 
   /// Issue connect command to proxy
   ///
-  Future connect(String domain) async {
+  Future<void> connect(String domain) async {
     final ds = domain.split(':');
     assert(ds.length == 2, "Domain must contain port, example.com:80");
 
     _request = SOCKSRequest(
       command: SOCKSCommand.Connect,
       addressType: SOCKSAddressType.Domain,
-      address: AsciiEncoder().convert(ds[0]).sublist(0, ds[0].length),
+      address: const AsciiEncoder().convert(ds[0]).sublist(0, ds[0].length),
       port: int.tryParse(ds[1]) ?? 80,
     );
     await _start();
     await _waitForConnect;
   }
 
-  Future connectIp(InternetAddress ip, int port) async {
+  Future<void> connectIp(InternetAddress ip, int port) async {
     _request = SOCKSRequest(
       command: SOCKSCommand.Connect,
       addressType: ip.type == InternetAddressType.IPv4
@@ -226,14 +232,14 @@ class SOCKSSocket {
     await _waitForConnect;
   }
 
-  Future close({bool keepOpen = true}) async {
+  Future<void> close({bool keepOpen = true}) async {
     await _stateStream.close();
     if (!keepOpen) {
       await _sock.close();
     }
   }
 
-  Future _start() async {
+  Future<void> _start() async {
     // send auth methods
     _setState(SOCKSState.Auth);
     //print(">> Version: 5, AuthMethods: $_auth");
@@ -249,7 +255,7 @@ class SOCKSSocket {
           {
             final have = _sock.available();
             final data = _sock.read(have);
-            _handleRead(data);
+            if (data != null) _handleRead(data);
             break;
           }
         case RawSocketEvent.closed:
@@ -257,6 +263,17 @@ class SOCKSSocket {
             _sockSub.cancel();
             break;
           }
+        case RawSocketEvent.readClosed:
+          // TODO: Handle this case.
+          print(
+              "SOCKSSocket._start(): unhandled event RawSocketEvent.readClosed");
+          break;
+        case RawSocketEvent.write:
+          // TODO: Handle this case.
+
+         print(
+              "SOCKSSocket._start(): unhandled event RawSocketEvent.write");
+          break;
       }
     });
   }
@@ -269,9 +286,9 @@ class SOCKSSocket {
     final data = [
       RFC1929Version,
       uname.length,
-      ...AsciiEncoder().convert(uname),
+      ...const AsciiEncoder().convert(uname),
       password.length,
-      ...AsciiEncoder().convert(password)
+      ...const AsciiEncoder().convert(password)
     ];
 
     //print(">> Sending $username:$password");
@@ -281,14 +298,14 @@ class SOCKSSocket {
   void _handleRead(Uint8List data) async {
     if (state == SOCKSState.Auth) {
       if (data.length == 2) {
-        final version = data[0];
-        final auth = AuthMethods._(data[1]);
-
+        // final version = data[0];
         //print("<< Version: $version, Auth: $auth");
+        final auth = AuthMethods._(data[1]);
 
         if (auth._value == AuthMethods.UsernamePassword._value) {
           _setState(SOCKSState.AuthStarted);
-          _sendUsernamePassword(username, password);
+          _sendUsernamePassword(username ?? '', password ?? '');
+          // TODO check that passing an empty string is valid (vs. null previously)
         } else if (auth._value == AuthMethods.NoAuth._value) {
           _setState(SOCKSState.RequestReady);
           _writeRequest(_request);
@@ -312,13 +329,13 @@ class SOCKSSocket {
       }
     } else if (_state == SOCKSState.RequestReady) {
       if (data.length >= 10) {
-        final version = data[0];
         final reply = SOCKSReply._(data[1]);
         //data[2] reserved
-        final addrType = SOCKSAddressType._(data[3]);
-        Uint8List addr;
-        var port = 0;
 
+        final version = data[0];
+        final addrType = SOCKSAddressType._(data[3]);
+        Uint8List? addr;
+        var port = 0;
         if (addrType == SOCKSAddressType.Domain) {
           final len = data[4];
           addr = data.sublist(5, 5 + len);
@@ -330,8 +347,9 @@ class SOCKSSocket {
           addr = data.sublist(5, 21);
           port = data[21] << 8 | data[22];
         }
+        print(
+            "<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
 
-        //print("<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
         if (reply._value == SOCKSReply.Success._value) {
           _setState(SOCKSState.Connected);
         } else {
@@ -363,4 +381,10 @@ class SOCKSSocket {
       throw "Must be in RequestReady state, current state $_state";
     }
   }
+
+  void write(Object? object) {
+    _sock.write(utf8.encode(object.toString()));
+    // TODO make sure the is correct; see _writeRequest above, may need to construct a SOCKSRequest from the data coming in
+  }
 }
+
