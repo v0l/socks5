@@ -258,21 +258,13 @@ class SOCKSSocket {
             if (data != null) _handleRead(data);
             break;
           }
+        case RawSocketEvent.readClosed:
         case RawSocketEvent.closed:
           {
             _sockSub.cancel();
             break;
           }
-        case RawSocketEvent.readClosed:
-          // TODO: Handle this case.
-          print(
-              "SOCKSSocket._start(): unhandled event RawSocketEvent.readClosed");
-          break;
         case RawSocketEvent.write:
-          // TODO: Handle this case.
-
-         print(
-              "SOCKSSocket._start(): unhandled event RawSocketEvent.write");
           break;
       }
     });
@@ -331,25 +323,6 @@ class SOCKSSocket {
       if (data.length >= 10) {
         final reply = SOCKSReply._(data[1]);
         //data[2] reserved
-
-        final version = data[0];
-        final addrType = SOCKSAddressType._(data[3]);
-        Uint8List? addr;
-        var port = 0;
-        if (addrType == SOCKSAddressType.Domain) {
-          final len = data[4];
-          addr = data.sublist(5, 5 + len);
-          port = data[5 + len] << 8 | data[6 + len];
-        } else if (addrType == SOCKSAddressType.IPv4) {
-          addr = data.sublist(5, 9);
-          port = data[9] << 8 | data[10];
-        } else if (addrType == SOCKSAddressType.IPv6) {
-          addr = data.sublist(5, 21);
-          port = data[21] << 8 | data[22];
-        }
-        print(
-            "<< Version: $version, Reply: $reply, AddrType: $addrType, Addr: $addr, Port: $port");
-
         if (reply._value == SOCKSReply.Success._value) {
           _setState(SOCKSState.Connected);
         } else {
@@ -387,4 +360,3 @@ class SOCKSSocket {
     // TODO make sure the is correct; see _writeRequest above, may need to construct a SOCKSRequest from the data coming in
   }
 }
-

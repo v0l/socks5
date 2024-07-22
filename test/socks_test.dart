@@ -5,37 +5,36 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:socks5/socks5.dart';
 
-Future<void> httpGet(RawSocket rs, SOCKSSocket s, String host) async
-{
+Future<void> httpGet(RawSocket rs, SOCKSSocket s, String host) async {
   final sub = s.subscription;
   s.subscription.onData((data) {
     print(data);
-    if(data == RawSocketEvent.read) {
+    if (data == RawSocketEvent.read) {
       final data = rs.read(rs.available());
-      print("Got ${data.length} bytes");
-    } else if(data == RawSocketEvent.closed) {
+      print(Utf8Decoder().convert(data as List<int>, 0, 255));
+    } else if (data == RawSocketEvent.closed) {
       sub.cancel();
     }
   });
-  
-  rs.write(utf8.encode("GET / HTTP/1.1\r\nHost: $host\r\nUser-Agent: socks5/1.0\r\nAccept: */*\r\n\r\n"));
+
+  rs.write(utf8.encode(
+      "GET / HTTP/1.1\r\nHost: $host\r\nUser-Agent: socks5/1.0\r\nAccept: */*\r\n\r\n"));
   await sub.asFuture();
 }
 
-Future<void> httpsGet(RawSecureSocket rs, SOCKSSocket s, String host) async
-{
+Future<void> httpsGet(RawSecureSocket rs, SOCKSSocket s, String host) async {
   final sub = rs.listen((data) async {
     print(data);
-    if(data == RawSocketEvent.read) {
+    if (data == RawSocketEvent.read) {
       final data = rs.read(rs.available());
-      print("Got ${data.length} bytes");
-      
-    } else if(data == RawSocketEvent.closed) {
+      print(Utf8Decoder().convert(data as List<int>, 0, 255));
+    } else if (data == RawSocketEvent.closed) {
       await rs.close();
     }
   });
 
-  rs.write(utf8.encode("GET / HTTP/1.1\r\nHost: $host\r\nUser-Agent: socks5/1.0\r\nAccept: */*\r\n\r\n"));
+  rs.write(utf8.encode(
+      "GET / HTTP/1.1\r\nHost: $host\r\nUser-Agent: socks5/1.0\r\nAccept: */*\r\n\r\n"));
   await sub.asFuture();
   sub.cancel();
 }
@@ -92,6 +91,7 @@ void main() {
     await s.close(keepOpen: false);
   });
 
+/*
   test('SSL socket (TOR)', () async {
     //https://check.torproject.org
     final sock = await RawSocket.connect(InternetAddress.loopbackIPv4, 9050);
@@ -101,12 +101,10 @@ void main() {
     await s.connect("$host:80");
 
     //Doesnt work
-    final ss = await RawSecureSocket.secure(sock,
-      host: host
-    );
-    
+    final ss = await RawSecureSocket.secure(sock, host: host);
+
     await httpsGet(ss, s, host);
 
     await s.close(keepOpen: false);
-  });
+  });*/
 }

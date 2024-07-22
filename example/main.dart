@@ -22,7 +22,7 @@ void main() async {
     /// read from here..
     if (event == RawSocketEvent.read) {
       final data = sock.read(sock.available());
-      print("Got ${data.length} bytes");
+      print("Got ${data?.length ?? 0} bytes");
     }
   });
 
